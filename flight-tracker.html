@@ -46,6 +46,8 @@
                     <select id="timezone-selector" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-1.5">
                         <option value="airport">Airport Local</option>
                         <option value="user">My Local</option>
+                        <option value="gst" selected>GST (+4)</option>
+                        <option value="utc">UTC</option>
                     </select>
                 </div>
             </div>
@@ -126,7 +128,7 @@
         
         // --- State ---
         let currentSearchType = 'airport';
-        let currentTimezone = 'airport';
+        let currentTimezone = 'gst'; // Default to GST
         let lastFlightData = [];
 
         // --- Event Listeners ---
@@ -271,11 +273,17 @@
                     hour: '2-digit', minute: '2-digit', hour12: false,
                     timeZoneName: 'short'
                 };
-
+                
+                // Set the timezone based on the dropdown selection
                 if (currentTimezone === 'airport' && timeZone) {
                     options.timeZone = timeZone;
+                } else if (currentTimezone === 'gst') {
+                    options.timeZone = 'Asia/Dubai';
+                } else if (currentTimezone === 'utc') {
+                    options.timeZone = 'UTC';
                 }
                 // If 'user' or if airport timezone is missing, it defaults to user's local.
+                
                 return date.toLocaleString('en-US', options);
             } catch (e) {
                 console.error("Error formatting date:", e);
