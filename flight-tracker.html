@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Flight Tracker (Live Data)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        .search-type-btn.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="mb-6 text-center">
+            <h1 class="text-4xl font-bold text-white mb-2">Advanced Flight Tracker</h1>
+            <p class="text-gray-400">Powered by a Live Aviation Data API</p>
+        </header>
+
+        <!-- Search Controls -->
+        <div class="max-w-2xl mx-auto mb-8">
+            <div id="search-type-selector" class="flex justify-center mb-4 border-b border-gray-700">
+                <button data-type="airport" class="search-type-btn active text-lg font-medium px-6 py-2 border-b-2 transition-colors">By Airport</button>
+                <button data-type="flight" class="search-type-btn text-gray-500 hover:text-white text-lg font-medium px-6 py-2 border-b-2 border-transparent transition-colors">By Flight Number</button>
+            </div>
+
+            <form id="search-form" class="flex flex-col sm:flex-row gap-4">
+                <input 
+                    type="text" 
+                    id="search-input" 
+                    placeholder="Enter Airport Name or Code (e.g., Dubai or OMDB)" 
+                    class="flex-grow w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-500"
+                >
+                <button 
+                    type="submit" 
+                    class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                >
+                    Track
+                </button>
+            </form>
+        </div>
+
+        <!-- Results Section -->
+        <main id="results-container" class="max-w-full mx-auto">
+            <div id="initial-message" class="text-center text-gray-500 py-16">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                <p class="mt-4">Select a search type and enter a query to begin.</p>
+            </div>
+            
+            <div id="loading-spinner" class="hidden text-center py-16">
+                 <div class="spinner h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+                 <p class="mt-4 text-gray-400">Fetching live flight data...</p>
+            </div>
+
+            <div id="error-message" class="hidden text-center py-16 bg-red-900/20 border border-red-500/30 rounded-lg">
+                <p id="error-text" class="text-red-400"></p>
+            </div>
+
+            <div id="flight-table-container" class="hidden overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700">
+                <table class="w-full min-w-max text-sm text-left text-gray-300">
+                    <thead class="text-xs text-gray-400 uppercase bg-gray-800">
+                        <tr>
+                            <th scope="col" class="px-5 py-3">Flight</th>
+                            <th scope="col" class="px-5 py-3">Airline</th>
+                            <th scope="col" class="px-5 py-3">Status</th>
+                            <th scope="col" class="px-5 py-3">Origin</th>
+                            <th scope="col" class="px-5 py-3">Destination</th>
+                            <th scope="col" class="px-5 py-3">Sch. Dep.</th>
+                            <th scope="col" class="px-5 py-3">Act. Dep.</th>
+                            <th scope="col" class="px-5 py-3">Sch. Arr.</th>
+                            <th scope="col" class="px-5 py-3">Actual/Est. Arr.</th>
+                            <th scope="col" class="px-5 py-3">Speed (kts)</th>
+                            <th scope="col" class="px-5 py-3">Altitude (ft)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flight-table-body">
+                        <!-- Live flight data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- API Configuration ---
+        const API_KEY = "673c38f2f354b1d4307e5140720339f2";
+        const BASE_URL = "https://api.aviationstack.com/v1/";
+
+        // A local database for airport names as a fallback
+        const AIRPORT_DB = {
+            'OMDB': 'Dubai (DXB)', 'KJFK': 'New York (JFK)', 'EGLL': 'London (Heathrow)',
+            'RJTT': 'Tokyo (Haneda)', 'LFPG': 'Paris (CDG)', 'YSSY': 'Sydney (SYD)',
+            'KLAX': 'Los Angeles (LAX)', 'ZBAA': 'Beijing (PEK)', 'WSSS': 'Singapore (SIN)',
+            'EHAM': 'Amsterdam (AMS)', 'CYYZ': 'Toronto (YYZ)', 'KATL': 'Atlanta (ATL)',
+            'KORD': 'Chicago (O\'Hare)', 'EDDF': 'Frankfurt (FRA)', 'OMAA': 'Abu Dhabi (AUH)',
+        };
+
+        // --- DOM Elements ---
+        const searchForm = document.getElementById('search-form');
+        const searchInput = document.getElementById('search-input');
+        const searchTypeSelector = document.getElementById('search-type-selector');
+        const initialMessage = document.getElementById('initial-message');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const flightTableContainer = document.getElementById('flight-table-container');
+        const flightTableBody = document.getElementById('flight-table-body');
+        
+        let currentSearchType = 'airport';
+
+        // --- Event Listeners ---
+        searchTypeSelector.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON' && e.target.dataset.type) {
+                currentSearchType = e.target.dataset.type;
+                updateSearchUI();
+            }
+        });
+        searchForm.addEventListener('submit', handleFormSubmit);
+
+        // --- Core Functions ---
+        function updateSearchUI() {
+            document.querySelectorAll('.search-type-btn').forEach(btn => btn.classList.remove('active', 'text-blue-500', 'text-gray-500'));
+            const activeButton = document.querySelector(`.search-type-btn[data-type="${currentSearchType}"]`);
+            activeButton.classList.add('active', 'text-blue-500');
+            document.querySelector(`.search-type-btn:not([data-type="${currentSearchType}"])`).classList.add('text-gray-500');
+            
+            searchInput.placeholder = currentSearchType === 'airport' 
+                ? 'Enter Airport Name or Code (e.g., Dubai or OMDB)' 
+                : 'Enter Flight Number (e.g., EK201)';
+            searchInput.value = '';
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const query = searchInput.value.trim();
+            if (!query) {
+                showError('Please enter a search query.');
+                return;
+            }
+            hideAllSections();
+            loadingSpinner.classList.remove('hidden');
+            try {
+                const flightData = await fetchLiveData(query, currentSearchType);
+                const processedData = processApiResponse(flightData);
+                renderFlightData(processedData);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+        
+        // --- Live API Data Fetching ---
+        async function fetchLiveData(query, type) {
+            let params;
+            if (type === 'airport') {
+                const airportCode = findAirportCode(query);
+                if (!airportCode) throw new Error(`Airport "${query}" could not be found.`);
+                params = `flights?access_key=${API_KEY}&dep_iata=${airportCode}`;
+            } else {
+                params = `flights?access_key=${API_KEY}&flight_iata=${query.toUpperCase()}`;
+            }
+            
+            const response = await fetch(BASE_URL + params);
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(`API Error: ${data.error.info}`);
+            }
+            if (!data.data || data.data.length === 0) {
+                throw new Error('No flights found for this query.');
+            }
+            return data.data;
+        }
+
+        // --- Data Processing ---
+        function processApiResponse(apiData) {
+            return apiData.map(flight => {
+                const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
+                
+                const arrival = {
+                    time: '—',
+                    type: ''
+                };
+
+                if (status === 'Landed' && flight.arrival.actual) {
+                    arrival.time = formatTime(flight.arrival.actual);
+                    arrival.type = 'Actual';
+                } else if (status === 'En-Route' && flight.arrival.estimated) {
+                    arrival.time = formatTime(flight.arrival.estimated);
+                    arrival.type = 'Est';
+                }
+
+                return {
+                    flightNumber: flight.flight.iata || '—',
+                    tailNumber: flight.aircraft?.registration || '—',
+                    airline: { name: flight.airline.name || '—' },
+                    status: status,
+                    origin: { name: `${flight.departure.airport || 'Unknown'} (${flight.departure.iata})` },
+                    destination: { name: `${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})` },
+                    scheduledDeparture: formatTime(flight.departure.scheduled),
+                    actualDeparture: formatTime(flight.departure.actual),
+                    scheduledArrival: formatTime(flight.arrival.scheduled),
+                    arrival: arrival,
+                    speed: flight.live?.speed_horizontal?.toFixed(0) || '—',
+                    altitude: flight.live?.altitude?.toLocaleString() || '—',
+                };
+            });
+        }
+
+        // --- Rendering ---
+        function renderFlightData(flights) {
+            flightTableBody.innerHTML = '';
+            flights.forEach(flight => {
+                const row = document.createElement('tr');
+                row.className = 'bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors duration-200';
+                
+                const arrivalTimeText = flight.arrival.type === 'Actual' 
+                    ? `<span class="text-green-400">${flight.arrival.time}</span>`
+                    : flight.arrival.type === 'Est'
+                    ? `<span class="text-cyan-400">${flight.arrival.time} (${flight.arrival.type})</span>`
+                    : '—';
+
+                row.innerHTML = `
+                    <td class="px-5 py-4 font-medium text-white whitespace-nowrap"><div class="font-bold">${flight.flightNumber}</div><div class="text-xs text-gray-400 font-mono">${flight.tailNumber}</div></td>
+                    <td class="px-5 py-4">${flight.airline.name}</td>
+                    <td class="px-5 py-4">${createStatusBadge(flight.status)}</td>
+                    <td class="px-5 py-4">${flight.origin.name}</td>
+                    <td class="px-5 py-4">${flight.destination.name}</td>
+                    <td class="px-5 py-4 font-mono">${flight.scheduledDeparture}</td>
+                    <td class="px-5 py-4 font-mono">${flight.actualDeparture}</td>
+                    <td class="px-5 py-4 font-mono">${flight.scheduledArrival}</td>
+                    <td class="px-5 py-4 font-mono">${arrivalTimeText}</td>
+                    <td class="px-5 py-4 font-mono">${flight.speed}</td>
+                    <td class="px-5 py-4 font-mono">${flight.altitude}</td>
+                `;
+                flightTableBody.appendChild(row);
+            });
+            flightTableContainer.classList.remove('hidden');
+        }
+
+        // --- Helper & UI Functions ---
+        const findAirportCode = (query) => {
+            const upperQuery = query.toUpperCase();
+            if (AIRPORT_DB[upperQuery]) return upperQuery;
+            for (const code in AIRPORT_DB) {
+                if (AIRPORT_DB[code].toUpperCase().includes(upperQuery)) return code;
+            }
+            return null;
+        };
+        const createStatusBadge = (status) => {
+            const colors = {'En-Route': 'bg-blue-900 text-blue-300', 'Landed': 'bg-green-900 text-green-300', 'Scheduled': 'bg-yellow-900 text-yellow-300', 'Cancelled': 'bg-red-900 text-red-300', 'Unknown': 'bg-gray-700 text-gray-300'};
+            return `<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[status] || 'bg-gray-700 text-gray-300'}">${status}</span>`;
+        };
+        const hideAllSections = () => [initialMessage, loadingSpinner, errorMessage, flightTableContainer].forEach(el => el.classList.add('hidden'));
+        const showError = (message) => {
+            hideAllSections();
+            errorText.textContent = message;
+            errorMessage.classList.remove('hidden');
+        };
+        const formatTime = (dateString) => {
+            if (!dateString) return '—';
+            try {
+                return new Date(dateString).toTimeString().slice(0, 5);
+            } catch (e) {
+                return '—';
+            }
+        };
+    </script>
+
+</body>
+</html>
