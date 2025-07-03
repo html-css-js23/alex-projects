@@ -50,15 +50,22 @@
     <div class="container mx-auto p-4 md:p-8">
         <header class="mb-6 text-center">
             <h1 class="text-4xl font-bold text-white mb-2">Advanced Flight Tracker</h1>
-            <p class="text-gray-400">Powered by a Live Aviation Data API</p>
+            <p class="text-gray-400">Powered by a Live Aviation Data API with AI Timezone Validation</p>
         </header>
 
-        <!-- Search Controls -->
         <div class="max-w-3xl mx-auto mb-8">
             <div class="flex flex-col md:flex-row justify-center items-center gap-4 md:gap-8 mb-4">
                 <div id="search-type-selector" class="flex justify-center border-b sm:border-b-0 border-gray-700">
                     <button data-type="airport" class="search-type-btn active text-lg font-medium px-6 py-2 border-b-2 transition-colors">By Airport</button>
                     <button data-type="flight" class="search-type-btn text-gray-500 hover:text-white text-lg font-medium px-6 py-2 border-b-2 border-transparent transition-colors">By Flight Number</button>
+                </div>
+                 <div class="flex items-center gap-2">
+                    <label for="timezone-selector" class="text-sm text-gray-400">Display Timezone:</label>
+                    <select id="timezone-selector" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-1.5">
+                        <option value="local">Airport Local</option>
+                        <option value="gst" selected>My Timezone (GST)</option>
+                        <option value="utc">UTC</option>
+                    </select>
                 </div>
                 <div class="flex items-center gap-2">
                     <input type="checkbox" id="show-past-flights" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-600 ring-offset-gray-800 focus:ring-2">
@@ -82,15 +89,12 @@
             </form>
         </div>
 
-        <!-- Results Section -->
         <main id="results-container" class="max-w-3xl mx-auto space-y-8">
-            <!-- Followed Flights Section -->
             <div id="followed-flights-section" class="hidden">
                 <h2 class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Followed Flights</h2>
                 <div id="followed-flights-list" class="space-y-3"></div>
             </div>
 
-            <!-- Search Results Section -->
             <div id="search-results-section" class="hidden">
                  <h2 class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Search Results</h2>
                  <div id="flight-list" class="space-y-3"></div>
@@ -112,11 +116,10 @@
         </main>
         
         <footer class="text-center mt-12 text-gray-600 text-sm">
-            <p>V1.0.6</p>
+            <p>V1.1.0</p>
         </footer>
     </div>
     
-    <!-- Follow Notice Modal -->
     <div id="follow-notice-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
         <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm text-center p-6">
             <h3 class="text-lg font-bold text-white mb-3">Device-Specific Following</h3>
@@ -128,13 +131,22 @@
 
     <script>
         // --- API Configuration ---
-        const API_KEY = "673c38f2f354b1d4307e5140720339f2";
-        const BASE_URL = "https://api.aviationstack.com/v1/";
+        const AVIATION_API_KEY = "673c38f2f354b1d4307e5140720339f2";
+        const AVIATION_BASE_URL = "https://api.aviationstack.com/v1/";
+        const GEMINI_API_KEY = ""; // Injected by the environment
+
+        // --- Caches and State ---
+        const timezoneCache = {};
+        let currentSearchType = 'airport';
+        let currentTimezone = 'gst';
+        let followedFlights = [];
+        let lastUnfilteredResults = [];
 
         // --- DOM Elements ---
         const searchForm = document.getElementById('search-form');
         const searchInput = document.getElementById('search-input');
         const searchTypeSelector = document.getElementById('search-type-selector');
+        const timezoneSelector = document.getElementById('timezone-selector');
         const showPastFlightsCheckbox = document.getElementById('show-past-flights');
         const initialMessage = document.getElementById('initial-message');
         const loadingSpinner = document.getElementById('loading-spinner');
@@ -147,34 +159,13 @@
         const followNoticeModal = document.getElementById('follow-notice-modal');
         const noticeOkBtn = document.getElementById('notice-ok-btn');
         
-        // --- State ---
-        let currentSearchType = 'airport';
-        let followedFlights = [];
-        let lastUnfilteredResults = [];
-
         // --- Event Listeners ---
         document.addEventListener('DOMContentLoaded', loadFollowedFlights);
-
-        searchTypeSelector.addEventListener('click', (e) => {
-            if (e.target.tagName === 'BUTTON' && e.target.dataset.type) {
-                currentSearchType = e.target.dataset.type;
-                updateSearchUI();
-            }
-        });
-
-        showPastFlightsCheckbox.addEventListener('change', () => {
-            if (lastUnfilteredResults.length > 0) {
-                const filteredData = applyFilters(lastUnfilteredResults);
-                renderFlightData(filteredData, flightList);
-            }
-        });
-
+        searchTypeSelector.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON' && e.target.dataset.type) { currentSearchType = e.target.dataset.type; updateSearchUI(); } });
+        timezoneSelector.addEventListener('change', (e) => { currentTimezone = e.target.value; if (lastUnfilteredResults.length > 0) { renderFlightData(applyFilters(lastUnfilteredResults), flightList); } if (followedFlights.length > 0) { loadFollowedFlights(); } });
+        showPastFlightsCheckbox.addEventListener('change', () => { if (lastUnfilteredResults.length > 0) { renderFlightData(applyFilters(lastUnfilteredResults), flightList); } });
         searchForm.addEventListener('submit', handleFormSubmit);
-        
-        noticeOkBtn.addEventListener('click', () => {
-            followNoticeModal.classList.add('hidden');
-            localStorage.setItem('followNoticeShown', 'true');
-        });
+        noticeOkBtn.addEventListener('click', () => { followNoticeModal.classList.add('hidden'); localStorage.setItem('followNoticeShown', 'true'); });
 
         // --- Core Functions ---
         function updateSearchUI() {
@@ -182,34 +173,26 @@
             const activeButton = document.querySelector(`.search-type-btn[data-type="${currentSearchType}"]`);
             activeButton.classList.add('active', 'text-blue-500');
             document.querySelector(`.search-type-btn:not([data-type="${currentSearchType}"])`).classList.add('text-gray-500');
-            
-            searchInput.placeholder = currentSearchType === 'airport' 
-                ? 'Enter Airport IATA Code (e.g., DXB)' 
-                : 'Enter Flight Number (e.g., EK201)';
+            searchInput.placeholder = currentSearchType === 'airport' ? 'Enter Airport IATA Code (e.g., DXB)' : 'Enter Flight Number (e.g., EK201)';
             searchInput.value = '';
         }
 
         async function handleFormSubmit(e) {
             e.preventDefault();
             const query = searchInput.value.trim();
-            if (!query) {
-                showError('Please enter a search query.');
-                return;
-            }
+            if (!query) { showError('Please enter a search query.'); return; }
             hideAllSections();
             loadingSpinner.classList.remove('hidden');
             try {
                 const flightData = await fetchLiveData(query, currentSearchType);
-                lastUnfilteredResults = processApiResponse(flightData);
+                lastUnfilteredResults = await processApiResponse(flightData);
                 const filteredData = applyFilters(lastUnfilteredResults);
-
                 if (filteredData.length > 0) {
                     renderFlightData(filteredData, flightList);
                     searchResultsSection.classList.remove('hidden');
                 } else {
                     showError("No flights match the current filters. Try enabling 'Show Past Flights' to see older results.");
                 }
-
             } catch (error) {
                 showError(error.message);
             } finally {
@@ -217,52 +200,67 @@
             }
         }
         
-        // --- Live API Data Fetching ---
+        // --- API Data Fetching ---
         async function fetchLiveData(query, type) {
             const upperQuery = query.toUpperCase();
-            let params = `flights?access_key=${API_KEY}`;
-            if (type === 'airport') {
-                params += `&dep_iata=${upperQuery}`;
-            } else {
-                params += `&flight_iata=${upperQuery}`;
-            }
-            
-            const response = await fetch(BASE_URL + params);
+            let params = `flights?access_key=${AVIATION_API_KEY}`;
+            params += type === 'airport' ? `&dep_iata=${upperQuery}` : `&flight_iata=${upperQuery}`;
+            const response = await fetch(AVIATION_BASE_URL + params);
             const data = await response.json();
-
-            if (data.error) {
-                throw new Error(`API Error: ${data.error.info}`);
-            }
-            if (!data.data || data.data.length === 0) {
-                throw new Error('No flights found for this query.');
-            }
+            if (data.error) throw new Error(`API Error: ${data.error.info}`);
+            if (!data.data || data.data.length === 0) throw new Error('No flights found for this query.');
             return data.data;
         }
 
+        // --- AI Timezone Validation ---
+        async function getValidatedTimezone(locationName, fallbackTimezone) {
+            if (!locationName) return fallbackTimezone || 'UTC';
+            if (timezoneCache[locationName]) return timezoneCache[locationName];
+
+            const prompt = `What is the IANA timezone identifier for the airport or city "${locationName}"? Respond with only the IANA identifier (e.g., "Europe/London").`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) {
+                    console.error("Gemini API Error Response:", await response.text());
+                    throw new Error(`Gemini API error: ${response.statusText}`);
+                }
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0) {
+                    const validatedTz = result.candidates[0].content.parts[0].text.trim();
+                    if (validatedTz.includes('/')) {
+                        timezoneCache[locationName] = validatedTz;
+                        return validatedTz;
+                    }
+                }
+            } catch (error) {
+                console.error("AI Timezone validation failed:", error);
+            }
+            return fallbackTimezone || 'UTC';
+        }
+
         // --- Data Processing & Filtering ---
-        function processApiResponse(apiData) {
-            return apiData.map(flight => ({
-                flight_status: flight.flight_status,
-                flight: flight.flight,
-                aircraft: flight.aircraft,
-                airline: flight.airline,
-                departure: flight.departure,
-                arrival: flight.arrival,
-                live: flight.live,
+        async function processApiResponse(apiData) {
+            const processedFlights = await Promise.all(apiData.map(async (flight) => {
+                const depTz = await getValidatedTimezone(flight.departure.airport, flight.departure.timezone);
+                const arrTz = await getValidatedTimezone(flight.arrival.airport, flight.arrival.timezone);
+                
+                return {
+                    ...flight,
+                    departure: { ...flight.departure, validated_timezone: depTz },
+                    arrival: { ...flight.arrival, validated_timezone: arrTz },
+                };
             }));
+            return processedFlights;
         }
 
         function applyFilters(flights) {
-            if (showPastFlightsCheckbox.checked) {
-                return flights; // Return all if checkbox is checked
-            }
+            if (showPastFlightsCheckbox.checked) return flights;
             const today = new Date();
-            today.setHours(0, 0, 0, 0); // Set to the beginning of today
-
-            return flights.filter(flight => {
-                const scheduledDate = new Date(flight.departure.scheduled);
-                return scheduledDate >= today;
-            });
+            today.setHours(0, 0, 0, 0);
+            return flights.filter(flight => new Date(flight.departure.scheduled) >= today);
         }
 
         // --- Rendering ---
@@ -275,20 +273,15 @@
             flights.forEach((flight, index) => {
                 const card = createFlightCard(flight, index);
                 container.appendChild(card);
-                // Trigger animation with a stagger
-                setTimeout(() => {
-                    card.classList.add('visible');
-                }, index * 50);
+                setTimeout(() => card.classList.add('visible'), index * 50);
             });
         }
 
         function createFlightCard(flight, index) {
             const card = document.createElement('div');
             card.className = 'flight-card bg-gray-800 rounded-lg shadow-md overflow-hidden';
-            
             const flightId = getFlightId(flight);
             const isFollowed = followedFlights.includes(flightId);
-
             const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
 
             card.innerHTML = `
@@ -302,182 +295,81 @@
                             <p class="text-sm text-gray-400">${flight.airline.name || '—'}</p>
                         </div>
                         <div class="flex gap-2">
-                            <button class="follow-btn text-sm py-2 px-4 rounded-md transition-colors ${isFollowed ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'}">
-                                ${isFollowed ? 'Unfollow' : 'Follow'}
-                            </button>
+                            <button class="follow-btn text-sm py-2 px-4 rounded-md transition-colors ${isFollowed ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'}">${isFollowed ? 'Unfollow' : 'Follow'}</button>
                             <button class="more-info-btn text-sm py-2 px-4 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors">More Info</button>
                         </div>
                     </div>
                     <div class="details-panel mt-4 pt-4 border-t border-gray-700">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                            <div>
-                                <p class="font-semibold text-gray-400">Origin</p>
-                                <p class="font-bold text-white">${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                            <div class="sm:col-span-2 grid grid-cols-2 gap-x-4">
+                                <div><p class="font-semibold text-gray-400">Origin</p><p class="font-bold text-white">${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</p></div>
+                                <div><p class="font-semibold text-gray-400">Destination</p><p class="font-bold text-white">${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</p></div>
                             </div>
-                             <div>
-                                <p class="font-semibold text-gray-400">Destination</p>
-                                <p class="font-bold text-white">${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</p>
-                            </div>
-                            <div>
-                                <p class="font-semibold text-gray-400">Scheduled Departure</p>
-                                <p class="font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.timezone)}</p>
-                            </div>
-                             <div>
-                                <p class="font-semibold text-gray-400">Actual Departure</p>
-                                <p class="font-mono">${formatDateTime(flight.departure.actual, flight.departure.timezone)}</p>
-                            </div>
-                            <div>
-                                <p class="font-semibold text-gray-400">Scheduled Arrival</p>
-                                <p class="font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.timezone)}</p>
-                            </div>
-                             <div>
-                                <p class="font-semibold text-gray-400">Final Arrival</p>
-                                <p class="font-mono">${getArrivalText(flight)}</p>
-                            </div>
-                             <div>
-                                <p class="font-semibold text-gray-400">Aircraft</p>
-                                <p class="font-mono">${flight.aircraft?.registration || '—'}</p>
-                            </div>
-                            <div class="flex gap-4">
-                                <div>
-                                    <p class="font-semibold text-gray-400">Speed</p>
-                                    <p class="font-mono">${flight.live?.speed_horizontal?.toFixed(0) || '—'} kts</p>
-                                </div>
-                                 <div>
-                                    <p class="font-semibold text-gray-400">Altitude</p>
-                                    <p class="font-mono">${flight.live?.altitude ? flight.live.altitude.toLocaleString() : '—'} ft</p>
-                                </div>
-                            </div>
+                            <div class="pt-2 border-t border-gray-700/50"><p class="font-semibold text-gray-400">Sch. Departure</p><p class="font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.validated_timezone)}</p></div>
+                            <div class="pt-2 border-t border-gray-700/50"><p class="font-semibold text-gray-400">Sch. Arrival</p><p class="font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.validated_timezone)}</p></div>
+                            <div><p class="font-semibold text-gray-400">Act. Departure</p><p class="font-mono">${formatDateTime(flight.departure.actual, flight.departure.validated_timezone)}</p></div>
+                            <div><p class="font-semibold text-gray-400">Final Arrival</p><p class="font-mono">${getArrivalText(flight)}</p></div>
+                            <div class="pt-2 border-t border-gray-700/50"><p class="font-semibold text-gray-400">Departure Gate / Terminal</p><p class="font-mono">${flight.departure.gate || '—'} / ${flight.departure.terminal || '—'}</p></div>
+                            <div class="pt-2 border-t border-gray-700/50"><p class="font-semibold text-gray-400">Arrival Gate / Terminal</p><p class="font-mono">${flight.arrival.gate || '—'} / ${flight.arrival.terminal || '—'}</p></div>
+                            <div><p class="font-semibold text-gray-400">Aircraft</p><p class="font-mono">${flight.aircraft?.registration || '—'}</p></div>
+                            <div><p class="font-semibold text-gray-400">Baggage</p><p class="font-mono">${flight.arrival.baggage || '—'}</p></div>
                         </div>
                     </div>
                 </div>
             `;
-
-            // Add event listeners for the buttons on this card
-            card.querySelector('.more-info-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                card.querySelector('.details-panel').classList.toggle('expanded');
-                e.target.textContent = e.target.textContent === 'More Info' ? 'Less Info' : 'More Info';
-            });
-
-            card.querySelector('.follow-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleFollowFlight(flight, e.target);
-            });
-
+            card.querySelector('.more-info-btn').addEventListener('click', (e) => { e.stopPropagation(); card.querySelector('.details-panel').classList.toggle('expanded'); e.target.textContent = e.target.textContent === 'More Info' ? 'Less Info' : 'More Info'; });
+            card.querySelector('.follow-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleFollowFlight(flight, e.target); });
             return card;
         }
 
         // --- Follow/Unfollow Logic ---
-        function getFlightId(flight) {
-            // Create a stable ID for the flight
-            return `${flight.flight.iata}-${flight.departure.scheduled}`;
-        }
-        
+        function getFlightId(flight) { return `${flight.flight.iata}-${flight.departure.scheduled}`; }
         function toggleFollowFlight(flight, button) {
             const flightId = getFlightId(flight);
             const index = followedFlights.indexOf(flightId);
-
-            if (index > -1) { // Is currently followed, so unfollow
-                followedFlights.splice(index, 1);
-                button.textContent = 'Follow';
-                button.className = 'follow-btn text-sm py-2 px-4 rounded-md transition-colors bg-blue-500/20 text-blue-300 hover:bg-blue-500/30';
-            } else { // Not followed, so follow
-                if (localStorage.getItem('followNoticeShown') !== 'true') {
-                    followNoticeModal.classList.remove('hidden');
-                }
-                followedFlights.push(flightId);
-                button.textContent = 'Unfollow';
-                button.className = 'follow-btn text-sm py-2 px-4 rounded-md transition-colors bg-red-500/20 text-red-400 hover:bg-red-500/30';
-            }
+            if (index > -1) { followedFlights.splice(index, 1); } 
+            else { if (localStorage.getItem('followNoticeShown') !== 'true') { followNoticeModal.classList.remove('hidden'); } followedFlights.push(flightId); }
             localStorage.setItem('followedFlights', JSON.stringify(followedFlights));
-            loadFollowedFlights(); // Refresh the followed list
+            loadFollowedFlights();
+            if(!searchResultsSection.classList.contains('hidden')) { renderFlightData(applyFilters(lastUnfilteredResults), flightList); }
         }
-
         async function loadFollowedFlights() {
             const savedFlights = localStorage.getItem('followedFlights');
-            if (savedFlights) {
-                followedFlights = JSON.parse(savedFlights);
-            }
-
-            if (followedFlights.length === 0) {
-                followedFlightsSection.classList.add('hidden');
-                initialMessage.classList.remove('hidden');
-                return;
-            }
-            
+            followedFlights = savedFlights ? JSON.parse(savedFlights) : [];
+            if (followedFlights.length === 0) { followedFlightsSection.classList.add('hidden'); initialMessage.classList.remove('hidden'); return; }
             initialMessage.classList.add('hidden');
             followedFlightsSection.classList.remove('hidden');
             followedFlightsList.innerHTML = `<div class="text-center text-gray-400 p-4"><div class="spinner h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div><p class="mt-2 text-sm">Updating followed flights...</p></div>`;
-
-            const flightDataPromises = followedFlights.map(id => {
-                const [iata, date] = id.split('-');
-                return fetchLiveData(iata, 'flight').catch(err => {
-                    console.error(`Could not update followed flight ${id}:`, err);
-                    return null; // Return null on error to filter out later
-                });
-            });
-
+            const flightDataPromises = followedFlights.map(id => fetchLiveData(id.split('-')[0], 'flight').catch(err => null));
             const flightDataArrays = await Promise.all(flightDataPromises);
-            const allFlights = flightDataArrays.flat().filter(f => f); // Flatten arrays and remove nulls
-            
-            // Filter to find the exact flights we are following
-            const relevantFlights = processApiResponse(allFlights).filter(f => followedFlights.includes(getFlightId(f)));
-            
-            if(relevantFlights.length > 0) {
-                 renderFlightData(relevantFlights, followedFlightsList);
-            } else {
-                followedFlightsList.innerHTML = `<p class="text-center text-gray-500 text-sm p-4">Could not find current data for followed flights. They may have already been completed.</p>`;
-            }
+            const allFlights = await processApiResponse(flightDataArrays.flat().filter(f => f));
+            const relevantFlights = allFlights.filter(f => followedFlights.includes(getFlightId(f)));
+            if(relevantFlights.length > 0) { renderFlightData(relevantFlights, followedFlightsList); } 
+            else { followedFlightsList.innerHTML = `<p class="text-center text-gray-500 text-sm p-4">Could not find current data for followed flights.</p>`; }
         }
 
-
         // --- Helper & UI Functions ---
-        const createStatusBadge = (status) => {
-            const colors = {'En-Route': 'bg-blue-900 text-blue-300', 'Landed': 'bg-green-900 text-green-300', 'Scheduled': 'bg-yellow-900 text-yellow-300', 'Cancelled': 'bg-red-900 text-red-300', 'Unknown': 'bg-gray-700 text-gray-300'};
-            return `<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[status] || 'bg-gray-700 text-gray-300'}">${status}</span>`;
-        };
+        const createStatusBadge = (status) => { const colors = {'En-Route': 'bg-blue-900 text-blue-300', 'Landed': 'bg-green-900 text-green-300', 'Scheduled': 'bg-yellow-900 text-yellow-300', 'Cancelled': 'bg-red-900 text-red-300', 'Unknown': 'bg-gray-700 text-gray-300'}; return `<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[status] || 'bg-gray-700 text-gray-300'}">${status}</span>`; };
         const hideAllSections = () => [initialMessage, loadingSpinner, errorMessage, searchResultsSection].forEach(el => el.classList.add('hidden'));
-        const showError = (message) => {
-            hideAllSections();
-            errorText.textContent = message;
-            errorMessage.classList.remove('hidden');
-        };
-        const formatDateTime = (dateString, timeZone) => {
+        const showError = (message) => { hideAllSections(); errorText.textContent = message; errorMessage.classList.remove('hidden'); };
+        const formatDateTime = (dateString, airportTimeZone) => {
             if (!dateString) return '—';
             try {
                 const date = new Date(dateString);
                 if (isNaN(date)) return '—';
-                const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
-
-                let isValidTimeZone = false;
-                if (timeZone) {
-                    try {
-                        new Intl.DateTimeFormat(undefined, { timeZone: timeZone });
-                        isValidTimeZone = true;
-                    } catch (e) {
-                        console.warn(`Invalid timezone identifier from API: "${timeZone}". Falling back to UTC.`);
-                    }
-                }
-
-                if (isValidTimeZone) {
-                    options.timeZone = timeZone;
-                    return `${new Intl.DateTimeFormat('en-US', options).format(date)} Local`;
+                const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZoneName: 'short' };
+                if (currentTimezone === 'local') {
+                    options.timeZone = airportTimeZone || 'UTC';
                 } else {
-                    return `${new Intl.DateTimeFormat('en-US', options).format(date)} UTC`;
+                    options.timeZone = currentTimezone === 'gst' ? 'Asia/Dubai' : 'UTC';
                 }
-            } catch (e) {
-                console.error("Error processing date string:", dateString, e);
-                return 'Invalid Date';
-            }
+                return new Intl.DateTimeFormat('en-US', options).format(date);
+            } catch (e) { return 'Invalid Date'; }
         };
         const getArrivalText = (flight) => {
             const status = (flight.flight_status || 'unknown');
-            if (status === 'landed' && flight.arrival.actual) {
-                return `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.timezone)}</span>`;
-            } else if (status === 'en-route' && flight.arrival.estimated) {
-                return `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.timezone)} (Est)</span>`;
-            }
+            if (status === 'landed' && flight.arrival.actual) { return `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.validated_timezone)}</span>`; } 
+            else if (status === 'en-route' && flight.arrival.estimated) { return `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.validated_timezone)} (Est)</span>`; }
             return '—';
         };
     </script>
