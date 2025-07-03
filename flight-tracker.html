@@ -42,10 +42,8 @@
                     <button data-type="flight" class="search-type-btn text-gray-500 hover:text-white text-lg font-medium px-6 py-2 border-b-2 border-transparent transition-colors">By Flight Number</button>
                 </div>
                 <div class="flex items-center gap-2">
-                    <label for="timezone-selector" class="text-sm text-gray-400">Timezone:</label>
+                    <label for="timezone-selector" class="text-sm text-gray-400">Display Timezone:</label>
                     <select id="timezone-selector" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-1.5">
-                        <option value="airport">Airport Local</option>
-                        <option value="user">My Local</option>
                         <option value="gst" selected>GST (+4)</option>
                         <option value="utc">UTC</option>
                     </select>
@@ -228,9 +226,9 @@
                 
                 let arrivalTimeText = '—';
                 if (status === 'Landed' && flight.arrival.actual) {
-                    arrivalTimeText = `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.timezone)}</span>`;
+                    arrivalTimeText = `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual)}</span>`;
                 } else if (status === 'En-Route' && flight.arrival.estimated) {
-                    arrivalTimeText = `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.timezone)} (Est)</span>`;
+                    arrivalTimeText = `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated)} (Est)</span>`;
                 }
 
                 row.innerHTML = `
@@ -239,9 +237,9 @@
                     <td class="px-5 py-4">${createStatusBadge(status)}</td>
                     <td class="px-5 py-4">${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</td>
                     <td class="px-5 py-4">${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</td>
-                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.timezone)}</td>
-                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.actual, flight.departure.timezone)}</td>
-                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.timezone)}</td>
+                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.scheduled)}</td>
+                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.actual)}</td>
+                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.arrival.scheduled)}</td>
                     <td class="px-5 py-4 font-mono">${arrivalTimeText}</td>
                     <td class="px-5 py-4 font-mono">${flight.live?.speed_horizontal?.toFixed(0) || '—'}</td>
                     <td class="px-5 py-4 font-mono">${flight.live?.altitude ? flight.live.altitude.toLocaleString() : '—'}</td>
@@ -262,7 +260,7 @@
             errorText.textContent = message;
             errorMessage.classList.remove('hidden');
         };
-        const formatDateTime = (dateString, timeZone) => {
+        const formatDateTime = (dateString) => {
             if (!dateString) return '—';
             try {
                 const date = new Date(dateString);
@@ -275,14 +273,11 @@
                 };
                 
                 // Set the timezone based on the dropdown selection
-                if (currentTimezone === 'airport' && timeZone) {
-                    options.timeZone = timeZone;
-                } else if (currentTimezone === 'gst') {
+                if (currentTimezone === 'gst') {
                     options.timeZone = 'Asia/Dubai';
                 } else if (currentTimezone === 'utc') {
                     options.timeZone = 'UTC';
                 }
-                // If 'user' or if airport timezone is missing, it defaults to user's local.
                 
                 return date.toLocaleString('en-US', options);
             } catch (e) {
