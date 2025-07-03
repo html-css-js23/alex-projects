@@ -26,26 +26,22 @@
         }
         
         /* --- Animation Styles --- */
-        .flight-row {
+        .flight-card {
             opacity: 0;
             transform: translateY(20px);
             transition: opacity 0.5s ease-out, transform 0.5s ease-out;
         }
-        .flight-row.visible {
+        .flight-card.visible {
             opacity: 1;
             transform: translateY(0);
         }
-
-        /* --- Modal Styles --- */
-        .modal-overlay {
-            transition: opacity 0.3s ease-in-out;
+        .details-panel {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out, padding 0.5s ease-in-out;
         }
-        .modal-content {
-            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
-        }
-        .modal-overlay.hidden .modal-content {
-            transform: scale(0.95);
-            opacity: 0;
+        .details-panel.expanded {
+            max-height: 500px; /* Adjust as needed */
         }
     </style>
 </head>
@@ -63,6 +59,10 @@
                 <div id="search-type-selector" class="flex justify-center border-b sm:border-b-0 border-gray-700">
                     <button data-type="airport" class="search-type-btn active text-lg font-medium px-6 py-2 border-b-2 transition-colors">By Airport</button>
                     <button data-type="flight" class="search-type-btn text-gray-500 hover:text-white text-lg font-medium px-6 py-2 border-b-2 border-transparent transition-colors">By Flight Number</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="show-past-flights" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-600 ring-offset-gray-800 focus:ring-2">
+                    <label for="show-past-flights" class="text-sm text-gray-400">Show Past Flights</label>
                 </div>
             </div>
 
@@ -83,10 +83,22 @@
         </div>
 
         <!-- Results Section -->
-        <main id="results-container" class="max-w-full mx-auto">
+        <main id="results-container" class="max-w-3xl mx-auto space-y-8">
+            <!-- Followed Flights Section -->
+            <div id="followed-flights-section" class="hidden">
+                <h2 class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Followed Flights</h2>
+                <div id="followed-flights-list" class="space-y-3"></div>
+            </div>
+
+            <!-- Search Results Section -->
+            <div id="search-results-section" class="hidden">
+                 <h2 class="text-2xl font-bold text-white mb-4 border-b border-gray-700 pb-2">Search Results</h2>
+                 <div id="flight-list" class="space-y-3"></div>
+            </div>
+
             <div id="initial-message" class="text-center text-gray-500 py-16">
                  <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                <p class="mt-4">Select a search type and enter a query to begin.</p>
+                <p class="mt-4">Your followed flights will appear here. <br> Use the search above to find and follow new flights.</p>
             </div>
             
             <div id="loading-spinner" class="hidden text-center py-16">
@@ -97,50 +109,19 @@
             <div id="error-message" class="hidden text-center py-16 bg-red-900/20 border border-red-500/30 rounded-lg">
                 <p id="error-text" class="text-red-400"></p>
             </div>
-
-            <div id="flight-table-container" class="hidden overflow-x-auto bg-gray-800/50 rounded-lg border border-gray-700">
-                <table class="w-full min-w-max text-sm text-left text-gray-300">
-                    <thead class="text-xs text-gray-400 uppercase bg-gray-800">
-                        <tr>
-                            <th scope="col" class="px-5 py-3">Flight</th>
-                            <th scope="col" class="px-5 py-3">Airline</th>
-                            <th scope="col" class="px-5 py-3">Status</th>
-                            <th scope="col" class="px-5 py-3">Origin</th>
-                            <th scope="col" class="px-5 py-3">Destination</th>
-                            <th scope="col" class="px-5 py-3">Scheduled Departure</th>
-                            <th scope="col" class="px-5 py-3">Actual Departure</th>
-                            <th scope="col" class="px-5 py-3">Scheduled Arrival</th>
-                            <th scope="col" class="px-5 py-3">Final Arrival (Est/Actual)</th>
-                            <th scope="col" class="px-5 py-3">Speed (kts)</th>
-                            <th scope="col" class="px-5 py-3">Altitude (ft)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="flight-table-body">
-                        <!-- Live flight data will be inserted here -->
-                    </tbody>
-                </table>
-            </div>
         </main>
         
         <footer class="text-center mt-12 text-gray-600 text-sm">
-            <p>V1.0.4</p>
+            <p>V1.0.6</p>
         </footer>
     </div>
-
-    <!-- Flight Details Modal -->
-    <div id="flight-modal" class="modal-overlay hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-        <div class="modal-content bg-gray-800 rounded-xl shadow-2xl w-full max-w-md max-h-full overflow-y-auto">
-            <div class="p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 id="modal-title" class="text-2xl font-bold text-white">Flight Details</h3>
-                    <button id="modal-close-btn" class="text-gray-400 hover:text-white transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-                <div id="modal-body" class="space-y-3 text-gray-300">
-                    <!-- Modal content will be injected here -->
-                </div>
-            </div>
+    
+    <!-- Follow Notice Modal -->
+    <div id="follow-notice-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm text-center p-6">
+            <h3 class="text-lg font-bold text-white mb-3">Device-Specific Following</h3>
+            <p class="text-gray-300 text-sm mb-6">Please note: Followed flights are saved to this device and browser only. They will not sync to other devices.</p>
+            <button id="notice-ok-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300 w-full">I Understand</button>
         </div>
     </div>
 
@@ -154,22 +135,26 @@
         const searchForm = document.getElementById('search-form');
         const searchInput = document.getElementById('search-input');
         const searchTypeSelector = document.getElementById('search-type-selector');
+        const showPastFlightsCheckbox = document.getElementById('show-past-flights');
         const initialMessage = document.getElementById('initial-message');
         const loadingSpinner = document.getElementById('loading-spinner');
         const errorMessage = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
-        const flightTableContainer = document.getElementById('flight-table-container');
-        const flightTableBody = document.getElementById('flight-table-body');
-        const flightModal = document.getElementById('flight-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalBody = document.getElementById('modal-body');
-        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const followedFlightsSection = document.getElementById('followed-flights-section');
+        const followedFlightsList = document.getElementById('followed-flights-list');
+        const searchResultsSection = document.getElementById('search-results-section');
+        const flightList = document.getElementById('flight-list');
+        const followNoticeModal = document.getElementById('follow-notice-modal');
+        const noticeOkBtn = document.getElementById('notice-ok-btn');
         
         // --- State ---
         let currentSearchType = 'airport';
-        let lastFlightData = [];
+        let followedFlights = [];
+        let lastUnfilteredResults = [];
 
         // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', loadFollowedFlights);
+
         searchTypeSelector.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON' && e.target.dataset.type) {
                 currentSearchType = e.target.dataset.type;
@@ -177,31 +162,19 @@
             }
         });
 
+        showPastFlightsCheckbox.addEventListener('change', () => {
+            if (lastUnfilteredResults.length > 0) {
+                const filteredData = applyFilters(lastUnfilteredResults);
+                renderFlightData(filteredData, flightList);
+            }
+        });
+
         searchForm.addEventListener('submit', handleFormSubmit);
-
-        flightTableBody.addEventListener('click', (e) => {
-            const row = e.target.closest('.flight-row');
-            if (row) {
-                const flightIndex = parseInt(row.dataset.flightIndex, 10);
-                const flight = lastFlightData[flightIndex];
-                if (flight) {
-                    openFlightModal(flight);
-                }
-            }
+        
+        noticeOkBtn.addEventListener('click', () => {
+            followNoticeModal.classList.add('hidden');
+            localStorage.setItem('followNoticeShown', 'true');
         });
-
-        modalCloseBtn.addEventListener('click', closeFlightModal);
-        flightModal.addEventListener('click', (e) => {
-            if (e.target === flightModal) { // Only close if clicking on the overlay itself
-                closeFlightModal();
-            }
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === "Escape") {
-                closeFlightModal();
-            }
-        });
-
 
         // --- Core Functions ---
         function updateSearchUI() {
@@ -227,8 +200,16 @@
             loadingSpinner.classList.remove('hidden');
             try {
                 const flightData = await fetchLiveData(query, currentSearchType);
-                lastFlightData = processApiResponse(flightData);
-                renderFlightData(lastFlightData);
+                lastUnfilteredResults = processApiResponse(flightData);
+                const filteredData = applyFilters(lastUnfilteredResults);
+
+                if (filteredData.length > 0) {
+                    renderFlightData(filteredData, flightList);
+                    searchResultsSection.classList.remove('hidden');
+                } else {
+                    showError("No flights match the current filters. Try enabling 'Show Past Flights' to see older results.");
+                }
+
             } catch (error) {
                 showError(error.message);
             } finally {
@@ -258,7 +239,7 @@
             return data.data;
         }
 
-        // --- Data Processing ---
+        // --- Data Processing & Filtering ---
         function processApiResponse(apiData) {
             return apiData.map(flight => ({
                 flight_status: flight.flight_status,
@@ -271,77 +252,183 @@
             }));
         }
 
+        function applyFilters(flights) {
+            if (showPastFlightsCheckbox.checked) {
+                return flights; // Return all if checkbox is checked
+            }
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Set to the beginning of today
+
+            return flights.filter(flight => {
+                const scheduledDate = new Date(flight.departure.scheduled);
+                return scheduledDate >= today;
+            });
+        }
+
         // --- Rendering ---
-        function renderFlightData(flights) {
-            flightTableBody.innerHTML = '';
+        function renderFlightData(flights, container) {
+            container.innerHTML = '';
+            if (flights.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500 text-sm p-4">No flights match the current filters.</p>`;
+                return;
+            }
             flights.forEach((flight, index) => {
-                const row = document.createElement('tr');
-                row.className = 'flight-row cursor-pointer';
-                row.dataset.flightIndex = index;
-                
-                const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
-                
-                let arrivalTimeText = '—';
-                if (status === 'Landed' && flight.arrival.actual) {
-                    arrivalTimeText = `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.timezone)}</span>`;
-                } else if (status === 'En-Route' && flight.arrival.estimated) {
-                    arrivalTimeText = `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.timezone)} (Est)</span>`;
-                }
-
-                row.innerHTML = `
-                    <td class="px-5 py-4 font-medium text-white whitespace-nowrap"><div class="font-bold">${flight.flight.iata || '—'}</div><div class="text-xs text-gray-400 font-mono">${flight.aircraft?.registration || '—'}</div></td>
-                    <td class="px-5 py-4">${flight.airline.name || '—'}</td>
-                    <td class="px-5 py-4">${createStatusBadge(status)}</td>
-                    <td class="px-5 py-4">${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</td>
-                    <td class="px-5 py-4">${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</td>
-                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.timezone)}</td>
-                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.actual, flight.departure.timezone)}</td>
-                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.timezone)}</td>
-                    <td class="px-5 py-4 font-mono">${arrivalTimeText}</td>
-                    <td class="px-5 py-4 font-mono">${flight.live?.speed_horizontal?.toFixed(0) || '—'}</td>
-                    <td class="px-5 py-4 font-mono">${flight.live?.altitude ? flight.live.altitude.toLocaleString() : '—'}</td>
-                `;
-                flightTableBody.appendChild(row);
-
+                const card = createFlightCard(flight, index);
+                container.appendChild(card);
                 // Trigger animation with a stagger
                 setTimeout(() => {
-                    row.classList.add('visible');
+                    card.classList.add('visible');
                 }, index * 50);
             });
-            flightTableContainer.classList.remove('hidden');
         }
 
-        // --- Modal Functions ---
-        function openFlightModal(flight) {
-            const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
-            modalTitle.textContent = `${flight.airline.name || ''} ${flight.flight.iata || ''}`;
+        function createFlightCard(flight, index) {
+            const card = document.createElement('div');
+            card.className = 'flight-card bg-gray-800 rounded-lg shadow-md overflow-hidden';
             
-            let arrivalTimeHtml = '—';
-            if (status === 'Landed' && flight.arrival.actual) {
-                arrivalTimeHtml = `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.timezone)} (Actual)</span>`;
-            } else if (status === 'En-Route' && flight.arrival.estimated) {
-                arrivalTimeHtml = `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.timezone)} (Estimated)</span>`;
+            const flightId = getFlightId(flight);
+            const isFollowed = followedFlights.includes(flightId);
+
+            const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
+
+            card.innerHTML = `
+                <div class="p-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <span class="font-bold text-xl text-white">${flight.flight.iata || '—'}</span>
+                                ${createStatusBadge(status)}
+                            </div>
+                            <p class="text-sm text-gray-400">${flight.airline.name || '—'}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="follow-btn text-sm py-2 px-4 rounded-md transition-colors ${isFollowed ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'}">
+                                ${isFollowed ? 'Unfollow' : 'Follow'}
+                            </button>
+                            <button class="more-info-btn text-sm py-2 px-4 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors">More Info</button>
+                        </div>
+                    </div>
+                    <div class="details-panel mt-4 pt-4 border-t border-gray-700">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p class="font-semibold text-gray-400">Origin</p>
+                                <p class="font-bold text-white">${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</p>
+                            </div>
+                             <div>
+                                <p class="font-semibold text-gray-400">Destination</p>
+                                <p class="font-bold text-white">${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</p>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-400">Scheduled Departure</p>
+                                <p class="font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.timezone)}</p>
+                            </div>
+                             <div>
+                                <p class="font-semibold text-gray-400">Actual Departure</p>
+                                <p class="font-mono">${formatDateTime(flight.departure.actual, flight.departure.timezone)}</p>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-400">Scheduled Arrival</p>
+                                <p class="font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.timezone)}</p>
+                            </div>
+                             <div>
+                                <p class="font-semibold text-gray-400">Final Arrival</p>
+                                <p class="font-mono">${getArrivalText(flight)}</p>
+                            </div>
+                             <div>
+                                <p class="font-semibold text-gray-400">Aircraft</p>
+                                <p class="font-mono">${flight.aircraft?.registration || '—'}</p>
+                            </div>
+                            <div class="flex gap-4">
+                                <div>
+                                    <p class="font-semibold text-gray-400">Speed</p>
+                                    <p class="font-mono">${flight.live?.speed_horizontal?.toFixed(0) || '—'} kts</p>
+                                </div>
+                                 <div>
+                                    <p class="font-semibold text-gray-400">Altitude</p>
+                                    <p class="font-mono">${flight.live?.altitude ? flight.live.altitude.toLocaleString() : '—'} ft</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Add event listeners for the buttons on this card
+            card.querySelector('.more-info-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                card.querySelector('.details-panel').classList.toggle('expanded');
+                e.target.textContent = e.target.textContent === 'More Info' ? 'Less Info' : 'More Info';
+            });
+
+            card.querySelector('.follow-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFollowFlight(flight, e.target);
+            });
+
+            return card;
+        }
+
+        // --- Follow/Unfollow Logic ---
+        function getFlightId(flight) {
+            // Create a stable ID for the flight
+            return `${flight.flight.iata}-${flight.departure.scheduled}`;
+        }
+        
+        function toggleFollowFlight(flight, button) {
+            const flightId = getFlightId(flight);
+            const index = followedFlights.indexOf(flightId);
+
+            if (index > -1) { // Is currently followed, so unfollow
+                followedFlights.splice(index, 1);
+                button.textContent = 'Follow';
+                button.className = 'follow-btn text-sm py-2 px-4 rounded-md transition-colors bg-blue-500/20 text-blue-300 hover:bg-blue-500/30';
+            } else { // Not followed, so follow
+                if (localStorage.getItem('followNoticeShown') !== 'true') {
+                    followNoticeModal.classList.remove('hidden');
+                }
+                followedFlights.push(flightId);
+                button.textContent = 'Unfollow';
+                button.className = 'follow-btn text-sm py-2 px-4 rounded-md transition-colors bg-red-500/20 text-red-400 hover:bg-red-500/30';
+            }
+            localStorage.setItem('followedFlights', JSON.stringify(followedFlights));
+            loadFollowedFlights(); // Refresh the followed list
+        }
+
+        async function loadFollowedFlights() {
+            const savedFlights = localStorage.getItem('followedFlights');
+            if (savedFlights) {
+                followedFlights = JSON.parse(savedFlights);
             }
 
-            modalBody.innerHTML = `
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Status</span> ${createStatusBadge(status)}</div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Airline</span> <strong>${flight.airline.name || '—'}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Flight Number</span> <strong class="font-mono">${flight.flight.iata || '—'}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Tail Number</span> <strong class="font-mono">${flight.aircraft?.registration || '—'}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Origin</span> <strong>${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Destination</span> <strong>${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Scheduled Departure</span> <strong class="font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.timezone)}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Actual Departure</span> <strong class="font-mono">${formatDateTime(flight.departure.actual, flight.departure.timezone)}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Scheduled Arrival</span> <strong class="font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.timezone)}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Final Arrival</span> <strong class="font-mono">${arrivalTimeHtml}</strong></div>
-                <div class="flex justify-between py-2 border-b border-gray-700"><span>Speed</span> <strong class="font-mono">${flight.live?.speed_horizontal?.toFixed(0) || '—'} kts</strong></div>
-                <div class="flex justify-between py-2"><span>Altitude</span> <strong class="font-mono">${flight.live?.altitude ? flight.live.altitude.toLocaleString() : '—'} ft</strong></div>
-            `;
-            flightModal.classList.remove('hidden');
-        }
+            if (followedFlights.length === 0) {
+                followedFlightsSection.classList.add('hidden');
+                initialMessage.classList.remove('hidden');
+                return;
+            }
+            
+            initialMessage.classList.add('hidden');
+            followedFlightsSection.classList.remove('hidden');
+            followedFlightsList.innerHTML = `<div class="text-center text-gray-400 p-4"><div class="spinner h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div><p class="mt-2 text-sm">Updating followed flights...</p></div>`;
 
-        function closeFlightModal() {
-            flightModal.classList.add('hidden');
+            const flightDataPromises = followedFlights.map(id => {
+                const [iata, date] = id.split('-');
+                return fetchLiveData(iata, 'flight').catch(err => {
+                    console.error(`Could not update followed flight ${id}:`, err);
+                    return null; // Return null on error to filter out later
+                });
+            });
+
+            const flightDataArrays = await Promise.all(flightDataPromises);
+            const allFlights = flightDataArrays.flat().filter(f => f); // Flatten arrays and remove nulls
+            
+            // Filter to find the exact flights we are following
+            const relevantFlights = processApiResponse(allFlights).filter(f => followedFlights.includes(getFlightId(f)));
+            
+            if(relevantFlights.length > 0) {
+                 renderFlightData(relevantFlights, followedFlightsList);
+            } else {
+                followedFlightsList.innerHTML = `<p class="text-center text-gray-500 text-sm p-4">Could not find current data for followed flights. They may have already been completed.</p>`;
+            }
         }
 
 
@@ -350,7 +437,7 @@
             const colors = {'En-Route': 'bg-blue-900 text-blue-300', 'Landed': 'bg-green-900 text-green-300', 'Scheduled': 'bg-yellow-900 text-yellow-300', 'Cancelled': 'bg-red-900 text-red-300', 'Unknown': 'bg-gray-700 text-gray-300'};
             return `<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[status] || 'bg-gray-700 text-gray-300'}">${status}</span>`;
         };
-        const hideAllSections = () => [initialMessage, loadingSpinner, errorMessage, flightTableContainer].forEach(el => el.classList.add('hidden'));
+        const hideAllSections = () => [initialMessage, loadingSpinner, errorMessage, searchResultsSection].forEach(el => el.classList.add('hidden'));
         const showError = (message) => {
             hideAllSections();
             errorText.textContent = message;
@@ -361,34 +448,21 @@
             try {
                 const date = new Date(dateString);
                 if (isNaN(date)) return '—';
-
-                const options = {
-                    month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit', hour12: false,
-                };
-                
-                // Always use the timezone provided by the API for the specific event
-                if (timeZone) {
-                    options.timeZone = timeZone;
-                }
-                
-                const formattedDate = new Intl.DateTimeFormat('en-US', options).format(date);
-                return `${formattedDate} Local`;
-
+                const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
+                if (timeZone) options.timeZone = timeZone;
+                return `${new Intl.DateTimeFormat('en-US', options).format(date)} Local`;
             } catch (e) {
-                console.error("Error formatting date:", e, "with timezone:", timeZone);
-                try {
-                    const date = new Date(dateString);
-                    return new Intl.DateTimeFormat('en-US', {
-                        month: 'short', day: 'numeric',
-                        hour: '2-digit', minute: '2-digit', hour12: false,
-                        timeZone: 'UTC',
-                        timeZoneName: 'short'
-                    }).format(date) + ' (Error)';
-                } catch (e2) {
-                    return 'Invalid Date';
-                }
+                return 'Invalid Date';
             }
+        };
+        const getArrivalText = (flight) => {
+            const status = (flight.flight_status || 'unknown');
+            if (status === 'landed' && flight.arrival.actual) {
+                return `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.timezone)}</span>`;
+            } else if (status === 'en-route' && flight.arrival.estimated) {
+                return `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.timezone)} (Est)</span>`;
+            }
+            return '—';
         };
     </script>
 
