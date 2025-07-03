@@ -35,17 +35,26 @@
         </header>
 
         <!-- Search Controls -->
-        <div class="max-w-2xl mx-auto mb-8">
-            <div id="search-type-selector" class="flex justify-center mb-4 border-b border-gray-700">
-                <button data-type="airport" class="search-type-btn active text-lg font-medium px-6 py-2 border-b-2 transition-colors">By Airport</button>
-                <button data-type="flight" class="search-type-btn text-gray-500 hover:text-white text-lg font-medium px-6 py-2 border-b-2 border-transparent transition-colors">By Flight Number</button>
+        <div class="max-w-3xl mx-auto mb-8">
+            <div class="flex flex-col md:flex-row justify-center items-center gap-4 md:gap-8 mb-4">
+                <div id="search-type-selector" class="flex justify-center border-b sm:border-b-0 border-gray-700">
+                    <button data-type="airport" class="search-type-btn active text-lg font-medium px-6 py-2 border-b-2 transition-colors">By Airport</button>
+                    <button data-type="flight" class="search-type-btn text-gray-500 hover:text-white text-lg font-medium px-6 py-2 border-b-2 border-transparent transition-colors">By Flight Number</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="timezone-selector" class="text-sm text-gray-400">Timezone:</label>
+                    <select id="timezone-selector" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-1.5">
+                        <option value="airport">Airport Local</option>
+                        <option value="user">My Local</option>
+                    </select>
+                </div>
             </div>
 
             <form id="search-form" class="flex flex-col sm:flex-row gap-4">
                 <input 
                     type="text" 
                     id="search-input" 
-                    placeholder="Enter Airport Name or Code (e.g., Dubai or OMDB)" 
+                    placeholder="Enter Airport IATA Code (e.g., DXB)" 
                     class="flex-grow w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-500"
                 >
                 <button 
@@ -82,10 +91,10 @@
                             <th scope="col" class="px-5 py-3">Status</th>
                             <th scope="col" class="px-5 py-3">Origin</th>
                             <th scope="col" class="px-5 py-3">Destination</th>
-                            <th scope="col" class="px-5 py-3">Sch. Dep.</th>
-                            <th scope="col" class="px-5 py-3">Act. Dep.</th>
-                            <th scope="col" class="px-5 py-3">Sch. Arr.</th>
-                            <th scope="col" class="px-5 py-3">Actual/Est. Arr.</th>
+                            <th scope="col" class="px-5 py-3">Scheduled Departure</th>
+                            <th scope="col" class="px-5 py-3">Actual Departure</th>
+                            <th scope="col" class="px-5 py-3">Scheduled Arrival</th>
+                            <th scope="col" class="px-5 py-3">Final Arrival (Est/Actual)</th>
                             <th scope="col" class="px-5 py-3">Speed (kts)</th>
                             <th scope="col" class="px-5 py-3">Altitude (ft)</th>
                         </tr>
@@ -103,19 +112,11 @@
         const API_KEY = "673c38f2f354b1d4307e5140720339f2";
         const BASE_URL = "https://api.aviationstack.com/v1/";
 
-        // A local database for airport names as a fallback
-        const AIRPORT_DB = {
-            'OMDB': 'Dubai (DXB)', 'KJFK': 'New York (JFK)', 'EGLL': 'London (Heathrow)',
-            'RJTT': 'Tokyo (Haneda)', 'LFPG': 'Paris (CDG)', 'YSSY': 'Sydney (SYD)',
-            'KLAX': 'Los Angeles (LAX)', 'ZBAA': 'Beijing (PEK)', 'WSSS': 'Singapore (SIN)',
-            'EHAM': 'Amsterdam (AMS)', 'CYYZ': 'Toronto (YYZ)', 'KATL': 'Atlanta (ATL)',
-            'KORD': 'Chicago (O\'Hare)', 'EDDF': 'Frankfurt (FRA)', 'OMAA': 'Abu Dhabi (AUH)',
-        };
-
         // --- DOM Elements ---
         const searchForm = document.getElementById('search-form');
         const searchInput = document.getElementById('search-input');
         const searchTypeSelector = document.getElementById('search-type-selector');
+        const timezoneSelector = document.getElementById('timezone-selector');
         const initialMessage = document.getElementById('initial-message');
         const loadingSpinner = document.getElementById('loading-spinner');
         const errorMessage = document.getElementById('error-message');
@@ -123,7 +124,10 @@
         const flightTableContainer = document.getElementById('flight-table-container');
         const flightTableBody = document.getElementById('flight-table-body');
         
+        // --- State ---
         let currentSearchType = 'airport';
+        let currentTimezone = 'airport';
+        let lastFlightData = [];
 
         // --- Event Listeners ---
         searchTypeSelector.addEventListener('click', (e) => {
@@ -132,6 +136,14 @@
                 updateSearchUI();
             }
         });
+
+        timezoneSelector.addEventListener('change', (e) => {
+            currentTimezone = e.target.value;
+            if (lastFlightData.length > 0) {
+                renderFlightData(lastFlightData); // Re-render with new timezone
+            }
+        });
+
         searchForm.addEventListener('submit', handleFormSubmit);
 
         // --- Core Functions ---
@@ -142,7 +154,7 @@
             document.querySelector(`.search-type-btn:not([data-type="${currentSearchType}"])`).classList.add('text-gray-500');
             
             searchInput.placeholder = currentSearchType === 'airport' 
-                ? 'Enter Airport Name or Code (e.g., Dubai or OMDB)' 
+                ? 'Enter Airport IATA Code (e.g., DXB)' 
                 : 'Enter Flight Number (e.g., EK201)';
             searchInput.value = '';
         }
@@ -158,8 +170,8 @@
             loadingSpinner.classList.remove('hidden');
             try {
                 const flightData = await fetchLiveData(query, currentSearchType);
-                const processedData = processApiResponse(flightData);
-                renderFlightData(processedData);
+                lastFlightData = processApiResponse(flightData); // Store processed data
+                renderFlightData(lastFlightData);
             } catch (error) {
                 showError(error.message);
             } finally {
@@ -169,13 +181,12 @@
         
         // --- Live API Data Fetching ---
         async function fetchLiveData(query, type) {
-            let params;
+            const upperQuery = query.toUpperCase();
+            let params = `flights?access_key=${API_KEY}`;
             if (type === 'airport') {
-                const airportCode = findAirportCode(query);
-                if (!airportCode) throw new Error(`Airport "${query}" could not be found.`);
-                params = `flights?access_key=${API_KEY}&dep_iata=${airportCode}`;
+                params += `&dep_iata=${upperQuery}`;
             } else {
-                params = `flights?access_key=${API_KEY}&flight_iata=${query.toUpperCase()}`;
+                params += `&flight_iata=${upperQuery}`;
             }
             
             const response = await fetch(BASE_URL + params);
@@ -192,37 +203,16 @@
 
         // --- Data Processing ---
         function processApiResponse(apiData) {
-            return apiData.map(flight => {
-                const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
-                
-                const arrival = {
-                    time: '—',
-                    type: ''
-                };
-
-                if (status === 'Landed' && flight.arrival.actual) {
-                    arrival.time = formatTime(flight.arrival.actual);
-                    arrival.type = 'Actual';
-                } else if (status === 'En-Route' && flight.arrival.estimated) {
-                    arrival.time = formatTime(flight.arrival.estimated);
-                    arrival.type = 'Est';
-                }
-
-                return {
-                    flightNumber: flight.flight.iata || '—',
-                    tailNumber: flight.aircraft?.registration || '—',
-                    airline: { name: flight.airline.name || '—' },
-                    status: status,
-                    origin: { name: `${flight.departure.airport || 'Unknown'} (${flight.departure.iata})` },
-                    destination: { name: `${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})` },
-                    scheduledDeparture: formatTime(flight.departure.scheduled),
-                    actualDeparture: formatTime(flight.departure.actual),
-                    scheduledArrival: formatTime(flight.arrival.scheduled),
-                    arrival: arrival,
-                    speed: flight.live?.speed_horizontal?.toFixed(0) || '—',
-                    altitude: flight.live?.altitude?.toLocaleString() || '—',
-                };
-            });
+            // Just store the raw data needed for rendering. Formatting will happen in the render function.
+            return apiData.map(flight => ({
+                flight_status: flight.flight_status,
+                flight: flight.flight,
+                aircraft: flight.aircraft,
+                airline: flight.airline,
+                departure: flight.departure,
+                arrival: flight.arrival,
+                live: flight.live,
+            }));
         }
 
         // --- Rendering ---
@@ -232,24 +222,27 @@
                 const row = document.createElement('tr');
                 row.className = 'bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors duration-200';
                 
-                const arrivalTimeText = flight.arrival.type === 'Actual' 
-                    ? `<span class="text-green-400">${flight.arrival.time}</span>`
-                    : flight.arrival.type === 'Est'
-                    ? `<span class="text-cyan-400">${flight.arrival.time} (${flight.arrival.type})</span>`
-                    : '—';
+                const status = (flight.flight_status || 'unknown').replace('_', '-').replace(/\b\w/g, l => l.toUpperCase());
+                
+                let arrivalTimeText = '—';
+                if (status === 'Landed' && flight.arrival.actual) {
+                    arrivalTimeText = `<span class="text-green-400 font-semibold">${formatDateTime(flight.arrival.actual, flight.arrival.timezone)}</span>`;
+                } else if (status === 'En-Route' && flight.arrival.estimated) {
+                    arrivalTimeText = `<span class="text-cyan-400">${formatDateTime(flight.arrival.estimated, flight.arrival.timezone)} (Est)</span>`;
+                }
 
                 row.innerHTML = `
-                    <td class="px-5 py-4 font-medium text-white whitespace-nowrap"><div class="font-bold">${flight.flightNumber}</div><div class="text-xs text-gray-400 font-mono">${flight.tailNumber}</div></td>
-                    <td class="px-5 py-4">${flight.airline.name}</td>
-                    <td class="px-5 py-4">${createStatusBadge(flight.status)}</td>
-                    <td class="px-5 py-4">${flight.origin.name}</td>
-                    <td class="px-5 py-4">${flight.destination.name}</td>
-                    <td class="px-5 py-4 font-mono">${flight.scheduledDeparture}</td>
-                    <td class="px-5 py-4 font-mono">${flight.actualDeparture}</td>
-                    <td class="px-5 py-4 font-mono">${flight.scheduledArrival}</td>
+                    <td class="px-5 py-4 font-medium text-white whitespace-nowrap"><div class="font-bold">${flight.flight.iata || '—'}</div><div class="text-xs text-gray-400 font-mono">${flight.aircraft?.registration || '—'}</div></td>
+                    <td class="px-5 py-4">${flight.airline.name || '—'}</td>
+                    <td class="px-5 py-4">${createStatusBadge(status)}</td>
+                    <td class="px-5 py-4">${flight.departure.airport || 'Unknown'} (${flight.departure.iata})</td>
+                    <td class="px-5 py-4">${flight.arrival.airport || 'Unknown'} (${flight.arrival.iata})</td>
+                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.scheduled, flight.departure.timezone)}</td>
+                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.departure.actual, flight.departure.timezone)}</td>
+                    <td class="px-5 py-4 font-mono">${formatDateTime(flight.arrival.scheduled, flight.arrival.timezone)}</td>
                     <td class="px-5 py-4 font-mono">${arrivalTimeText}</td>
-                    <td class="px-5 py-4 font-mono">${flight.speed}</td>
-                    <td class="px-5 py-4 font-mono">${flight.altitude}</td>
+                    <td class="px-5 py-4 font-mono">${flight.live?.speed_horizontal?.toFixed(0) || '—'}</td>
+                    <td class="px-5 py-4 font-mono">${flight.live?.altitude ? flight.live.altitude.toLocaleString() : '—'}</td>
                 `;
                 flightTableBody.appendChild(row);
             });
@@ -257,14 +250,6 @@
         }
 
         // --- Helper & UI Functions ---
-        const findAirportCode = (query) => {
-            const upperQuery = query.toUpperCase();
-            if (AIRPORT_DB[upperQuery]) return upperQuery;
-            for (const code in AIRPORT_DB) {
-                if (AIRPORT_DB[code].toUpperCase().includes(upperQuery)) return code;
-            }
-            return null;
-        };
         const createStatusBadge = (status) => {
             const colors = {'En-Route': 'bg-blue-900 text-blue-300', 'Landed': 'bg-green-900 text-green-300', 'Scheduled': 'bg-yellow-900 text-yellow-300', 'Cancelled': 'bg-red-900 text-red-300', 'Unknown': 'bg-gray-700 text-gray-300'};
             return `<span class="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[status] || 'bg-gray-700 text-gray-300'}">${status}</span>`;
@@ -275,12 +260,26 @@
             errorText.textContent = message;
             errorMessage.classList.remove('hidden');
         };
-        const formatTime = (dateString) => {
+        const formatDateTime = (dateString, timeZone) => {
             if (!dateString) return '—';
             try {
-                return new Date(dateString).toTimeString().slice(0, 5);
+                const date = new Date(dateString);
+                if (isNaN(date)) return '—';
+
+                const options = {
+                    month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', hour12: false,
+                    timeZoneName: 'short'
+                };
+
+                if (currentTimezone === 'airport' && timeZone) {
+                    options.timeZone = timeZone;
+                }
+                // If 'user' or if airport timezone is missing, it defaults to user's local.
+                return date.toLocaleString('en-US', options);
             } catch (e) {
-                return '—';
+                console.error("Error formatting date:", e);
+                return 'Invalid Date';
             }
         };
     </script>
