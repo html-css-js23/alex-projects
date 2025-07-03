@@ -448,10 +448,26 @@
             try {
                 const date = new Date(dateString);
                 if (isNaN(date)) return '—';
-                const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
-                if (timeZone) options.timeZone = timeZone;
-                return `${new Intl.DateTimeFormat('en-US', options).format(date)} Local`;
+                const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' };
+
+                let isValidTimeZone = false;
+                if (timeZone) {
+                    try {
+                        new Intl.DateTimeFormat(undefined, { timeZone: timeZone });
+                        isValidTimeZone = true;
+                    } catch (e) {
+                        console.warn(`Invalid timezone identifier from API: "${timeZone}". Falling back to UTC.`);
+                    }
+                }
+
+                if (isValidTimeZone) {
+                    options.timeZone = timeZone;
+                    return `${new Intl.DateTimeFormat('en-US', options).format(date)} Local`;
+                } else {
+                    return `${new Intl.DateTimeFormat('en-US', options).format(date)} UTC`;
+                }
             } catch (e) {
+                console.error("Error processing date string:", dateString, e);
                 return 'Invalid Date';
             }
         };
