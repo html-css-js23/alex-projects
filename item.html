@@ -35,7 +35,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- Configuration ---
             // Add your new item and accessory information here.
-            // The key is the unique part of the URL hash (e.g., '5rhp-main').
             const itemData = {
                 '5rhp-main': {
                     name: 'Main 5RH Pro',
@@ -85,7 +84,6 @@
                     details: 'psw-:nfc',
                     icon: '🏷️'
                 }
-                // Add more items here following the same format
             };
 
             // --- Main Display Logic Function ---
@@ -104,7 +102,6 @@
                 let htmlContent = '';
 
                 if (item) {
-                    // An item matching the ID was found
                     let title = `${item.name} ${item.model}`.trim();
                     let description = item.details;
                     let icon = item.icon;
@@ -112,7 +109,7 @@
                     if (isBattery) {
                         title = `Battery Pack`;
                         description = `For the ${item.name} ${item.model}`;
-                        icon = '🔋'; // Override icon for batteries
+                        icon = '🔋';
                     }
 
                     htmlContent = `
@@ -122,35 +119,26 @@
                             <p class="text-gray-600 dark:text-gray-400 mt-2">${description}</p>
                         </div>
                     `;
-
                 } else {
-                    // This block handles cases where no valid item was found.
                     if (fullId) {
-                        // A hash exists in the URL, but it's not a valid one.
                         htmlContent = `
                             <div class="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 px-4 py-3 rounded-xl shadow-lg text-center fade-in" role="alert">
                                 <div class="text-6xl mb-4">🚫</div>
                                 <strong class="font-bold text-xl">Invalid ID!</strong>
-                                <p class="block sm:inline mt-2">This NFC tag ID is not recognized. You will be redirected to the home page in 10 seconds.</p>
+                                <p class="block sm:inline mt-2">This NFC tag ID is not recognized. Redirecting in 10 seconds.</p>
                             </div>
                         `;
-                        // Redirect to the home page (URL without the hash) after 10 seconds
-                        setTimeout(() => {
-                            window.location.href = window.location.pathname;
-                        }, 10000);
-
+                        setTimeout(() => { window.location.href = window.location.pathname; }, 10000);
                     } else {
-                        // No hash was in the URL, show the default welcome page.
                         const isIPhone = /iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
                         const isAndroidWithNFC = 'NDEFReader' in window;
-
-                        let instructions = 'Please scan an NFC tag to identify an item.';
+                        let instructions = 'Scan an NFC tag to identify an item.';
                         let scanButtonHTML = '';
 
                         if (isIPhone) {
-                            instructions = 'To identify an item, please tap the NFC tag with your iPhone to see its details.';
+                            instructions = 'Tap an NFC tag with your iPhone to see its details.';
                         } else if (isAndroidWithNFC) {
-                            instructions = 'Tap the button below and hold your phone near an NFC tag to identify an item.';
+                            instructions = 'Tap the button below and hold your phone near an NFC tag.';
                             scanButtonHTML = `<button id="scanButton" class="mt-6 inline-block bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors text-lg">Scan NFC Tag</button>`;
                         }
 
@@ -158,9 +146,7 @@
                             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center fade-in">
                                 <div class="text-6xl mb-4">📱</div>
                                 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Item Identification System</h1>
-                                <p class="text-gray-600 dark:text-gray-400 mt-2">
-                                   ${instructions}
-                                </p>
+                                <p class="text-gray-600 dark:text-gray-400 mt-2">${instructions}</p>
                                 ${scanButtonHTML}
                                 <p id="nfc-status" class="text-sm text-gray-500 mt-4 h-4"></p>
                             </div>
@@ -168,10 +154,8 @@
                     }
                 }
                 
-                // Insert the generated HTML into the container
                 contentContainer.innerHTML = htmlContent;
 
-                // If the scan button was added, attach the event listener
                 const scanButton = document.getElementById('scanButton');
                 if (scanButton) {
                     scanButton.addEventListener('click', scanNFC);
@@ -181,37 +165,59 @@
             // --- Web NFC Scan Function (for Android) ---
             async function scanNFC() {
                 const statusEl = document.getElementById('nfc-status');
+                console.log("scanNFC function called.");
+
                 if (!('NDEFReader' in window)) {
                     statusEl.textContent = "Web NFC is not supported on this browser.";
+                    console.error("Web NFC not supported on this browser.");
                     return;
                 }
 
                 try {
                     const ndef = new NDEFReader();
-                    statusEl.textContent = "Bring an NFC tag near your phone...";
                     await ndef.scan();
-                    
+                    statusEl.textContent = "Bring an NFC tag near your phone...";
+                    console.log("NFC scan started successfully. Waiting for a tag...");
+
                     ndef.addEventListener("reading", ({ message }) => {
-                        const record = message.records[0];
-                        const textDecoder = new TextDecoder(record.encoding);
-                        const id = textDecoder.decode(record.data);
+                        console.log("NFC tag read. Raw message object:", message);
+
+                        if (!message.records || message.records.length === 0) {
+                            statusEl.textContent = "Tag is empty.";
+                            console.warn("Tag is empty or has no records.");
+                            return;
+                        }
                         
+                        const textDecoder = new TextDecoder();
+                        const scannedText = textDecoder.decode(message.records[0].data);
+                        console.log("Decoded text from tag:", scannedText);
+                        let id = '';
+
+                        const hashIndex = scannedText.lastIndexOf('#');
+                        if (hashIndex !== -1) {
+                            id = scannedText.substring(hashIndex + 1);
+                        } else {
+                            id = scannedText;
+                        }
+                        
+                        console.log(`Extracted ID: '${id}'. Updating URL hash.`);
                         statusEl.textContent = `Tag Read! ID: ${id}`;
-                        // The NFC tag should contain just the ID, e.g., "5rhp-main"
-                        // We update the hash, which will trigger the display logic.
                         window.location.hash = id;
                     });
 
+                    ndef.addEventListener("error", (event) => {
+                        statusEl.textContent = "NFC Scan Error. Please try again.";
+                        console.error("NFC 'error' event fired:", event.message);
+                    });
+
                 } catch (error) {
-                    statusEl.textContent = `Error: ${error.message}`;
-                    console.error("NFC Error:", error);
+                    statusEl.textContent = `Error starting scan: ${error.message}`;
+                    console.error("Error in scanNFC try...catch block:", error);
                 }
             }
 
-            // --- Initial Load ---
+            // --- Initial Load & Event Listener ---
             displayContent();
-            
-            // --- Listen for hash changes to redisplay content ---
             window.addEventListener('hashchange', displayContent);
         });
     </script>
