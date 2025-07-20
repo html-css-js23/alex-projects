@@ -34,88 +34,78 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- Configuration ---
-            // Add your new radio and accessory information here.
+            // Add your new item and accessory information here.
             // The key is the unique part of the URL hash (e.g., '5rhp-main').
-            const radioData = {
+            const itemData = {
                 '5rhp-main': {
                     name: 'Main 5RH Pro',
                     model: 'Baofeng Radio',
                     details: 'Blue antenna',
-                    icon: '📻' // Example icon
+                    icon: '📻'
                 },
                 '5rhp-bck': {
                     name: 'Backup 5RH Pro',
                     model: 'Baofeng Radio',
                     details: 'Green antenna',
-                    icon: '📻' // Example icon
+                    icon: '📻'
                 },
                 'anker-powerbank': {
                     name: 'Anker PowerBank 2USBC',
                     model: '',
                     details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
-                    icon: '🔋' // Example icon
+                    icon: '🔋'
                 },
                 'cpl-filter-1': {
                     name: 'CPL Filter #1',
                     model: '',
                     details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
-                    icon: '📹' // Example icon
+                    icon: '📹'
                 },
                 'wallet': {
                     name: 'Grey Wallet',
                     model: '',
                     details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
-                    icon: '💵' // Example icon
+                    icon: '💵'
                 },
                 '5rhp-mainchgr': {
                     name: '5RH Pro Main Battery Charger',
                     model: 'Baofeng Radio',
                     details: 'Blue Antenna',
-                    icon: '🔌' // Example icon
+                    icon: '🔌'
                 },
                 'nfc-psw': {
                     name: 'nfc',
                     model: '',
                     details: 'psw-:nfc',
-                    icon: '🏷️' // Example icon
-                },
-                // Add more radios here following the same format
-                // 'another-radio-id': { ... }
+                    icon: '🏷️'
+                }
+                // Add more items here following the same format
             };
 
             // --- Logic ---
             const contentContainer = document.getElementById('content-container');
-
-            // Get the identifier from the URL hash, e.g., "#5rhp-main-bat"
-            // We remove the '#' to get the actual ID string.
             const fullId = window.location.hash.substring(1);
-
             let baseId = fullId;
             let isBattery = false;
 
-            // Check if the ID ends with '-bat' for battery packs
             if (fullId.endsWith('-bat')) {
                 isBattery = true;
-                // Remove the '-bat' suffix to get the base radio ID
                 baseId = fullId.substring(0, fullId.length - 4);
             }
 
-            const item = radioData[baseId];
+            const item = itemData[baseId];
             let htmlContent = '';
 
             if (item) {
                 // An item matching the ID was found
-                let title = '';
-                let description = '';
-                let icon = '🔋'; // Default battery icon
+                let title = `${item.name} ${item.model}`.trim();
+                let description = item.details;
+                let icon = item.icon;
 
                 if (isBattery) {
                     title = `Battery Pack`;
                     description = `For the ${item.name} ${item.model}`;
-                } else {
-                    title = `${item.name} ${item.model}`;
-                    description = item.details;
-                    icon = item.icon;
+                    icon = '🔋'; // Override icon for batteries
                 }
 
                 htmlContent = `
@@ -127,16 +117,39 @@
                 `;
 
             } else {
-                // No valid ID was found in the URL or the hash is empty
-                htmlContent = `
-                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center fade-in">
-                        <div class="text-6xl mb-4">🤔</div>
-                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Radio System</h1>
-                        <p class="text-gray-600 dark:text-gray-400 mt-2">
-                            Please scan an NFC tag to identify a radio or accessory. (/nfc-psw)
-                        </p>
-                    </div>
-                `;
+                // This block handles cases where no valid item was found.
+                if (fullId) {
+                    // A hash exists in the URL, but it's not a valid one.
+                    htmlContent = `
+                        <div class="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 px-4 py-3 rounded-xl shadow-lg text-center fade-in" role="alert">
+                            <div class="text-6xl mb-4">🚫</div>
+                            <strong class="font-bold text-xl">Invalid ID!</strong>
+                            <p class="block sm:inline mt-2">This NFC tag ID is not recognized. You will be redirected to the home page in 10 seconds.</p>
+                        </div>
+                    `;
+                    // Redirect to the home page (URL without the hash) after 10 seconds
+                    setTimeout(() => {
+                        window.location.href = window.location.pathname;
+                    }, 10000);
+
+                } else {
+                    // No hash was in the URL, show the default welcome page.
+                    const isIPhone = /iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                    let instructions = 'Please scan an NFC tag to identify an item.';
+                    if (isIPhone) {
+                        instructions = 'To identify an item, please tap the NFC tag with your iPhone to see its details.';
+                    }
+
+                    htmlContent = `
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center fade-in">
+                            <div class="text-6xl mb-4">📱</div>
+                            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Item Identification System</h1>
+                            <p class="text-gray-600 dark:text-gray-400 mt-2">
+                               ${instructions}
+                            </p>
+                        </div>
+                    `;
+                }
             }
             
             // Insert the generated HTML into the container
