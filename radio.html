@@ -35,7 +35,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- Configuration ---
             // Add your new radio and accessory information here.
-            // The key is the unique part of the URL (e.g., '5rhp-main').
+            // The key is the unique part of the URL hash (e.g., '5rhp-main').
             const radioData = {
                 '5rhp-main': {
                     name: 'Main 5RH Pro',
@@ -56,12 +56,9 @@
             // --- Logic ---
             const contentContainer = document.getElementById('content-container');
 
-            // Get the path from the URL, e.g., "/radio/5rhp-main-bat"
-            const path = window.location.pathname;
-            
-            // Split the path into segments and get the last part
-            const pathSegments = path.split('/').filter(segment => segment); // filter removes empty strings
-            const fullId = pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : '';
+            // Get the identifier from the URL hash, e.g., "#5rhp-main-bat"
+            // We remove the '#' to get the actual ID string.
+            const fullId = window.location.hash.substring(1);
 
             let baseId = fullId;
             let isBattery = false;
@@ -100,16 +97,16 @@
                 `;
 
             } else {
-                // No valid ID was found in the URL
+                // No valid ID was found in the URL or the hash is empty
                 htmlContent = `
                     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center fade-in">
                         <div class="text-6xl mb-4">🤔</div>
-                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Unknown Device</h1>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Radio System</h1>
                         <p class="text-gray-600 dark:text-gray-400 mt-2">
-                            This NFC tag isn't recognized. Please scan a valid radio or accessory tag.
+                            Please scan an NFC tag to identify a radio or accessory.
                         </p>
-                        <a href="/radio" class="mt-6 inline-block bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
-                            Go to Radio Home
+                        <a href="https://github.com/your-username/your-repo" class="mt-6 inline-block bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors">
+                            View on GitHub
                         </a>
                     </div>
                 `;
