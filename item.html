@@ -53,19 +53,19 @@
                 'anker-powerbank': {
                     name: 'Anker PowerBank 2USBC',
                     model: '',
-                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
                     icon: '🔋'
                 },
                 'cpl-filter-1': {
                     name: 'CPL Filter #1',
                     model: '',
-                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
                     icon: '📹'
                 },
                 'wallet': {
                     name: 'Grey Wallet',
                     model: '',
-                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
                     icon: '💵'
                 },
                 '5rhp-mainchgr': {
@@ -126,17 +126,29 @@
                         icon = '🔋';
                     }
 
-                    htmlContent = `
-                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center fade-in">
-                            <div class="text-6xl mb-4">${icon}</div>
-                            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">${title}</h1>
-                            <p class="text-gray-600 dark:text-gray-400 mt-2">${description}</p>
-                            
+                    // Check if the user arrived here via the on-page scan button
+                    const scannedFromPage = sessionStorage.getItem('scannedFromPage') === 'true';
+                    let countdownHTML = '';
+
+                    if (scannedFromPage) {
+                        // Only show the countdown if they scanned from the page
+                        countdownHTML = `
                             <!-- Countdown Timer Section -->
                             <div id="countdown-container" class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
                                 <p id="countdown-message" class="text-gray-500 dark:text-gray-400">Returning to home in <span id="countdown-timer" class="font-bold">15</span> seconds...</p>
                                 <button id="cancel-button" class="mt-2 text-sm text-blue-500 hover:underline">Cancel</button>
                             </div>
+                        `;
+                        // Clear the flag so it doesn't reappear on refresh
+                        sessionStorage.removeItem('scannedFromPage');
+                    }
+
+                    htmlContent = `
+                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center fade-in">
+                            <div class="text-6xl mb-4">${icon}</div>
+                            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">${title}</h1>
+                            <p class="text-gray-600 dark:text-gray-400 mt-2">${description}</p>
+                            ${countdownHTML}
                         </div>
                     `;
                 } else {
@@ -266,6 +278,9 @@
                             id = scannedText;
                         }
                         
+                        // Set a flag to indicate navigation was from the on-page scanner
+                        sessionStorage.setItem('scannedFromPage', 'true');
+
                         console.log(`Extracted ID: '${id}'. Updating URL hash.`);
                         statusEl.textContent = `Tag Read! ID: ${id}`;
                         window.location.hash = id;
