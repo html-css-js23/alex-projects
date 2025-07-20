@@ -33,8 +33,10 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // --- Global Variables ---
+            let abortController; // To control the NFC scan session
+
             // --- Configuration ---
-            // Add your new item and accessory information here.
             const itemData = {
                 '5rhp-main': {
                     name: 'Main 5RH Pro',
@@ -51,19 +53,19 @@
                 'anker-powerbank': {
                     name: 'Anker PowerBank 2USBC',
                     model: '',
-                    details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
                     icon: '🔋'
                 },
                 'cpl-filter-1': {
                     name: 'CPL Filter #1',
                     model: '',
-                    details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
                     icon: '📹'
                 },
                 'wallet': {
                     name: 'Grey Wallet',
                     model: '',
-                    details: 'Please email alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
                     icon: '💵'
                 },
                 '5rhp-mainchgr': {
@@ -77,6 +79,18 @@
                     model: '',
                     details: 'Over-shoulder Microphone',
                     icon: '🎙️'
+                },
+                'dmc-g85': {
+                    name: 'Camera',
+                    model: 'Lumix Panasonic DMC-G85',
+                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    icon: '📷'
+                },
+                'dmc-g85-lens': {
+                    name: 'Camera Lens',
+                    model: 'Lumix Panasonic H-FS14140',
+                    details: 'Please contact alexanderdrakeverschueren@gmail.com to return. Thank you!',
+                    icon: '📷'
                 },
                 'nfc-psw': {
                     name: 'nfc',
@@ -117,6 +131,12 @@
                             <div class="text-6xl mb-4">${icon}</div>
                             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">${title}</h1>
                             <p class="text-gray-600 dark:text-gray-400 mt-2">${description}</p>
+                            
+                            <!-- Countdown Timer Section -->
+                            <div id="countdown-container" class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <p id="countdown-message" class="text-gray-500 dark:text-gray-400">Returning to home in <span id="countdown-timer" class="font-bold">15</span> seconds...</p>
+                                <button id="cancel-button" class="mt-2 text-sm text-blue-500 hover:underline">Cancel</button>
+                            </div>
                         </div>
                     `;
                 } else {
@@ -125,10 +145,9 @@
                             <div class="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 px-4 py-3 rounded-xl shadow-lg text-center fade-in" role="alert">
                                 <div class="text-6xl mb-4">🚫</div>
                                 <strong class="font-bold text-xl">Invalid ID!</strong>
-                                <p class="block sm:inline mt-2">This NFC tag ID is not recognized. Redirecting in 10 seconds.</p>
+                                <p class="block sm:inline mt-2">This NFC tag ID is not recognized. Redirecting in <span id="invalid-countdown-timer" class="font-bold">10</span> seconds.</p>
                             </div>
                         `;
-                        setTimeout(() => { window.location.href = window.location.pathname; }, 10000);
                     } else {
                         const isIPhone = /iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
                         const isAndroidWithNFC = 'NDEFReader' in window;
@@ -156,10 +175,57 @@
                 
                 contentContainer.innerHTML = htmlContent;
 
+                // Attach event listeners after content is rendered
                 const scanButton = document.getElementById('scanButton');
                 if (scanButton) {
                     scanButton.addEventListener('click', scanNFC);
                 }
+
+                const countdownContainer = document.getElementById('countdown-container');
+                if (countdownContainer) {
+                    setupItemCountdown(countdownContainer);
+                }
+
+                const invalidCountdownTimer = document.getElementById('invalid-countdown-timer');
+                if(invalidCountdownTimer){
+                    setupInvalidIdCountdown(invalidCountdownTimer);
+                }
+            }
+            
+            // --- Countdown Timer Logic for Valid Items ---
+            function setupItemCountdown(container) {
+                let countdown = 15;
+                const timerEl = document.getElementById('countdown-timer');
+                const cancelButton = document.getElementById('cancel-button');
+
+                const intervalId = setInterval(() => {
+                    countdown--;
+                    if (timerEl) {
+                        timerEl.textContent = countdown;
+                    }
+                    if (countdown <= 0) {
+                        clearInterval(intervalId);
+                        window.location.href = window.location.pathname;
+                    }
+                }, 1000);
+
+                cancelButton.addEventListener('click', () => {
+                    clearInterval(intervalId);
+                    container.style.display = 'none';
+                });
+            }
+
+            // --- Countdown Timer Logic for Invalid IDs ---
+            function setupInvalidIdCountdown(timerEl){
+                let countdown = 10;
+                const intervalId = setInterval(() => {
+                    countdown--;
+                    timerEl.textContent = countdown;
+                    if (countdown <= 0) {
+                        clearInterval(intervalId);
+                        window.location.href = window.location.pathname;
+                    }
+                }, 1000);
             }
 
             // --- Web NFC Scan Function (for Android) ---
@@ -174,23 +240,23 @@
                 }
 
                 try {
+                    abortController = new AbortController();
                     const ndef = new NDEFReader();
-                    await ndef.scan();
+                    await ndef.scan({ signal: abortController.signal });
                     statusEl.textContent = "Bring an NFC tag near your phone...";
                     console.log("NFC scan started successfully. Waiting for a tag...");
 
                     ndef.addEventListener("reading", ({ message }) => {
-                        console.log("NFC tag read. Raw message object:", message);
+                        console.log("NFC tag read. Aborting scan to prevent re-reads.");
+                        abortController.abort(); // Stop scanning immediately
 
                         if (!message.records || message.records.length === 0) {
                             statusEl.textContent = "Tag is empty.";
-                            console.warn("Tag is empty or has no records.");
                             return;
                         }
                         
                         const textDecoder = new TextDecoder();
                         const scannedText = textDecoder.decode(message.records[0].data);
-                        console.log("Decoded text from tag:", scannedText);
                         let id = '';
 
                         const hashIndex = scannedText.lastIndexOf('#');
@@ -211,8 +277,10 @@
                     });
 
                 } catch (error) {
-                    statusEl.textContent = `Error starting scan: ${error.message}`;
-                    console.error("Error in scanNFC try...catch block:", error);
+                    if (error.name !== 'AbortError') {
+                        statusEl.textContent = `Error starting scan: ${error.message}`;
+                        console.error("Error in scanNFC try...catch block:", error);
+                    }
                 }
             }
 
